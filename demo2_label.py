@@ -16,29 +16,29 @@ import imageutils
 import utils
 
 
-def fit_submanifold_landmarks_to_image(template,original,Xlm,face_d,face_p,landmarks = list(range(68))):
+def fit_submanifold_landmarks_to_image(template, original, Xlm, face_d, face_p, landmarks=list(range(68))):
     '''
     Fit the submanifold to the template and take the top-K.
 
     Xlm is a N x 68 x 2 list of landmarks.
     '''
-    lossX = numpy.empty((len(Xlm),),dtype = numpy.float64)
-    MX = numpy.empty((len(Xlm),2,3),dtype = numpy.float64)
+    lossX = numpy.empty((len(Xlm),), dtype=numpy.float64)
+    MX = numpy.empty((len(Xlm), 2, 3), dtype=numpy.float64)
     nfail = 0
     for i in range(len(Xlm)):
         lm = Xlm[i]
         try:
-            M,loss = alignface.fit_face_landmarks(Xlm[i],template,landmarks = landmarks,image_dims = original.shape[:2])
+            M, loss = alignface.fit_face_landmarks(Xlm[i], template, landmarks=landmarks, image_dims=original.shape[:2])
             lossX[i] = loss
             MX[i] = M
         except alignface.FitError:
             lossX[i] = float('inf')
             MX[i] = 0
-            nfail+= 1
-    if nfail>1:
+            nfail += 1
+    if nfail > 1:
         print('fit submanifold, {} errors.'.format(nfail))
     a = numpy.argsort(lossX)
-    return a,lossX,MX
+    return a, lossX, MX
 
 
 def select(constraints, attributes, filelist):
@@ -55,7 +55,6 @@ def select(constraints, attributes, filelist):
 if __name__ == '__main__':
     # configure by command-line arguments
     parser = argparse.ArgumentParser(description='Generate high resolution face transformations.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('method', type=str, choices=['positive', 'negative'], default='positive', help='desired transformation')
     parser.add_argument('input', type=str, nargs='+', help='input color image')
     parser.add_argument('--backend', type=str, default='torch', choices=['torch', 'caffe+scipy'], help='reconstruction implementation')
     parser.add_argument('--device_id', type=int, default=0, help='zero-indexed CUDA device')
@@ -70,6 +69,10 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=str, default='', help='output is written to this pathname')
     parser.add_argument('--include_original', action='store_true', default=False, help='the first column of the output is the original image')
     parser.add_argument('--dataset', type=str, default='facemodel')
+    parser.add_argument('--dataroot', type=str, default='')
+    parser.add_argument('--vector_path', type=str)
+    parser.add_argument('--load_size', type=int, default=None)
+    parser.add_argument('--attr_bins', nargs='+', type=float, default=[])
 
     config = parser.parse_args()
     postprocess = set(config.postprocess.split(','))
@@ -89,17 +92,19 @@ if __name__ == '__main__':
 
     # Set the free parameters
     K = config.K
-    delta_params = [float(x.strip()) for x in config.delta.split(',')]
+    # delta_params = [float(x.strip()) for x in config.delta.split(',')]
+    delta_params = list(numpy.load(config.vector_path.replace('.npz', '_inner.npz'))['inner_prod'])
 
-    X = config.input
+    X = [os.path.join(config.dataroot, x.rstrip('\n')) for x in open(config.input[0], 'r').readlines()] if config.input[0].endswith('.txt') else config.input
 
     t0 = time.time()
-    opathlist = []
+    if not os.path.exists(config.output):
+        os.mkdir(config.output)
     # for each test image
     for i in range(len(X)):
         xX = X[i]
         prefix_path = os.path.splitext(xX)[0]
-        template, original = alignface.detect_landmarks(xX,face_d,face_p)
+        template, original = alignface.detect_landmarks(xX, face_d, face_p, resize=config.load_size)
         image_dims = original.shape[:2]
         if min(image_dims)<minimum_resolution:
             s = float(minimum_resolution)/min(image_dims)
@@ -114,12 +119,8 @@ if __name__ == '__main__':
         filelist = classifier.filelist
 
         # select positive and negative sets
-        if config.method == 'positive':
-            P = select(False, attributes, filelist)
-            Q = select(True, attributes, filelist)
-        else:
-            P = select(True, attributes, filelist)
-            Q = select(False, attributes, filelist)
+        P = select(False, attributes, filelist)
+        Q = select(True, attributes, filelist)
 
         # fit the best 4K database images to input image
         Plm = classifier.lookup_landmarks(P[:4*K])
@@ -130,50 +131,31 @@ if __name__ == '__main__':
         # Use the K best fitted images
         xP = [P[i] for i in idxP[:K]]
         xQ = [Q[i] for i in idxQ[:K]]
-        PF = model.mean_F(utils.warped_image_feed(xP, MP[idxP[:K]], image_dims))
-        QF = model.mean_F(utils.warped_image_feed(xQ, MQ[idxQ[:K]], image_dims))
-        if config.scaling == 'beta':
-            WF = (QF-PF)/((QF-PF)**2).mean()
-        elif config.scaling == 'none':
-            WF = (QF-PF)
+
+        PF = model.mean_F(utils.image_feed(xP[:K], image_dims))
+        QF = model.mean_F(utils.image_feed(xQ[:K], image_dims))
+
+        WF = QF - PF
+        WF = 1. * WF / numpy.linalg.norm(WF)
+
         max_iter = config.iter
         init = original
-        if config.extradata:
-            numpy.savez('{}_{}{}.npz'.format(prefix_path, config.method, postfix_comment), WF=WF)
 
         # for each interpolation step
         result = []
-        for delta in delta_params:
+        for i, delta in enumerate(delta_params, 0):
+            true_delta = delta - numpy.inner(XF, WF)
             print(xX, image_dims, delta, len(xP), len(xQ))
             t2 = time.time()
-            Y = model.F_inverse(XF+WF*delta, max_iter=max_iter, initial_image=init)
+            Y = model.F_inverse(XF+WF*true_delta, max_iter=max_iter, initial_image=init)
             t3 = time.time()
             print('{} minutes to reconstruct'.format((t3-t2)/60.0))
             result.append(Y)
             max_iter = config.iter//2
             init = Y
-        result = numpy.asarray([result])
-        original = numpy.asarray([original])
-        X_mask = prefix_path+'-mask.png'
-        if 'mask' in postprocess and os.path.exists(X_mask):
-            mask = imageutils.resize(imageutils.read(X_mask), image_dims)
-            result *= mask
-            result += original*(1-mask)
-        if 'color' in postprocess:
-            result = utils.color_match(numpy.asarray([original]), result)
-        if 'mask' in postprocess and os.path.exists(X_mask):
-            result *= mask
-            result += original*(1-mask)
-        if config.include_original:
-            m = imageutils.montage(numpy.concatenate([numpy.expand_dims(original, 1), result], axis=1))
-        else:
-            m = imageutils.montage(result)
-        if config.output:
-            opath = config.output
-        else:
-            opath = '{}_{}_{}{}.{}'.format(prefix_path, timestamp, config.dataset, postfix_comment, config.output_format)
-        imageutils.write(opath, m)
-        opathlist.append(opath)
-    print('Outputs are {}'.format(' '.join(opathlist)))
-    t1 = time.time()
-    print('{} minutes ({} minutes per image).'.format((t1-t0)/60.0,(t1-t0)/60.0/len(X)/len(delta_params)))
+
+            _, iname = os.path.split(xX)
+            opath = os.path.join(config.output, '%.3f_%s.jpg' % (config.attr_bins[i], iname))
+            imageutils.write(opath, Y)
+            print('--> image %s, class %d' % (xX, i))
+

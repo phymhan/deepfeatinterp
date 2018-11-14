@@ -16,29 +16,29 @@ import imageutils
 import utils
 
 
-def fit_submanifold_landmarks_to_image(template,original,Xlm,face_d,face_p,landmarks = list(range(68))):
+def fit_submanifold_landmarks_to_image(template, original, Xlm, face_d, face_p, landmarks=list(range(68))):
     '''
     Fit the submanifold to the template and take the top-K.
 
     Xlm is a N x 68 x 2 list of landmarks.
     '''
-    lossX = numpy.empty((len(Xlm),),dtype = numpy.float64)
-    MX = numpy.empty((len(Xlm),2,3),dtype = numpy.float64)
+    lossX = numpy.empty((len(Xlm),), dtype=numpy.float64)
+    MX = numpy.empty((len(Xlm), 2, 3), dtype=numpy.float64)
     nfail = 0
     for i in range(len(Xlm)):
         lm = Xlm[i]
         try:
-            M,loss = alignface.fit_face_landmarks(Xlm[i],template,landmarks = landmarks,image_dims = original.shape[:2])
+            M, loss = alignface.fit_face_landmarks(Xlm[i], template, landmarks=landmarks, image_dims=original.shape[:2])
             lossX[i] = loss
             MX[i] = M
         except alignface.FitError:
             lossX[i] = float('inf')
             MX[i] = 0
-            nfail+= 1
-    if nfail>1:
+            nfail += 1
+    if nfail > 1:
         print('fit submanifold, {} errors.'.format(nfail))
     a = numpy.argsort(lossX)
-    return a,lossX,MX
+    return a, lossX, MX
 
 
 def select(constraints, attributes, filelist):

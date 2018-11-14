@@ -269,9 +269,13 @@ def load_face_detector(predictor_path='models/shape_predictor_68_face_landmarks.
   predictor=dlib.shape_predictor(predictor_path)
   return detector,predictor
 
-def detect_landmarks(ipath,detector,predictor,upsample=0,image=None):
+def detect_landmarks(ipath,detector,predictor,upsample=0,image=None,resize=None):
   if image is None:
     original255=skimage.io.imread(ipath).astype(numpy.ubyte)
+    if resize is not None:
+      if not isinstance(resize, tuple):
+        resize = tuple([resize, resize])
+      original255 = (skimage.transform.resize(original255, resize)*255).astype(numpy.ubyte)
     original=original255/255.0
   else:
     original=image

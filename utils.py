@@ -13,7 +13,7 @@ def image_feed(S,image_dims):
   '''
   for x in S:
     I=imageutils.read(x)
-    if I.shape[:2]!=image_dims:
+    if I.shape[:2] != tuple(image_dims):
       yield imageutils.resize(I,tuple(image_dims))
     else:
       yield I
