@@ -14,6 +14,7 @@ import argparse
 import alignface
 import imageutils
 import utils
+import random
 
 
 def fit_submanifold_landmarks_to_image(template, original, Xlm, face_d, face_p, landmarks=list(range(68))):
@@ -53,6 +54,7 @@ def select(constraints, attributes, filelist):
 
 
 if __name__ == '__main__':
+    random.seed(0)
     # configure by command-line arguments
     parser = argparse.ArgumentParser(description='Generate high resolution face transformations.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('input', type=str, nargs='+', help='input color image')
@@ -97,14 +99,13 @@ if __name__ == '__main__':
     delta_params = list(numpy.load(config.vector_path.replace('.npz', '_inner.npz'))['inner_prod'])
 
     X = [os.path.join(config.dataroot, x.rstrip('\n')) for x in open(config.input[0], 'r').readlines()] if config.input[0].endswith('.txt') else config.input
+    X = random.sample(X, min(config.how_many, len(X)))
 
     t0 = time.time()
     if not os.path.exists(config.output):
         os.mkdir(config.output)
     # for each test image
     for i in range(len(X)):
-        if i >= config.how_many:
-            break
         xX = X[i]
         prefix_path = os.path.splitext(xX)[0]
         template, original = alignface.detect_landmarks(xX, face_d, face_p, resize=config.load_size)

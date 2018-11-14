@@ -72,8 +72,10 @@ if __name__ == '__main__':
     parser.add_argument('--include_original', action='store_true', default=False, help='the first column of the output is the original image')
     parser.add_argument('--dataset', type=str, default='facemodel')
     parser.add_argument('--save_vector', action='store_true')
+    parser.add_argument('--get_prior', action='store_true')
     parser.add_argument('--vector_path', type=str)
     parser.add_argument('--dataroot', type=str, default='')
+    parser.add_argument('--load_size', type=int, default=None)
 
     config = parser.parse_args()
     postprocess = set(config.postprocess.split(','))
@@ -133,7 +135,7 @@ if __name__ == '__main__':
         OF = model.mean_F(utils.image_feed([X], image_dims))
         with open(config.vector_path, 'w') as f:
             numpy.savez(f, vector=WF, image_dims=image_dims, origin=OF)
-    else:
+    elif not config.get_prior:
         # load vector
         data = numpy.load(config.vector_path)
         WF = data['vector']
@@ -155,3 +157,25 @@ if __name__ == '__main__':
         with open(inner_product_path, 'w') as f:
             print(plist)
             numpy.savez(f, inner_prod=plist)
+    else:
+        X = [os.path.join(config.dataroot, x.rstrip('\n')) for x in open(config.input, 'r').readlines()]
+
+        # load vector
+        data = numpy.load(config.vector_path)
+        WF = data['vector']
+        OF = data['origin']
+        image_dims = data['image_dims']
+        WF_norm = 1. * WF / numpy.linalg.norm(WF)
+        inner_prods = []
+
+        for i in range(len(X)):
+            xX = X[i]
+            XF = model.mean_F(utils.image_feed([xX], image_dims))
+
+            p = numpy.inner(XF, WF_norm)
+            inner_prods.append(p)
+
+        inner_product_path = config.vector_path.replace('.npz', '_prior.npz')
+        with open(inner_product_path, 'w') as f:
+            print(inner_prods)
+            numpy.savez(f, inner_prod=inner_prods)

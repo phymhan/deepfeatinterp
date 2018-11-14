@@ -2,7 +2,7 @@
 
 import numpy
 import math
-# import lutorpy
+import lutorpy
 import time
 import skimage.io
 import os.path
