@@ -73,6 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--vector_path', type=str)
     parser.add_argument('--load_size', type=int, default=None)
     parser.add_argument('--attr_bins', nargs='+', type=float, default=[])
+    parser.add_argument('--how_many', type=int, default=10000)
 
     config = parser.parse_args()
     postprocess = set(config.postprocess.split(','))
@@ -102,6 +103,8 @@ if __name__ == '__main__':
         os.mkdir(config.output)
     # for each test image
     for i in range(len(X)):
+        if i >= config.how_many:
+            break
         xX = X[i]
         prefix_path = os.path.splitext(xX)[0]
         template, original = alignface.detect_landmarks(xX, face_d, face_p, resize=config.load_size)
