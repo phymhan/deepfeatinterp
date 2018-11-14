@@ -281,13 +281,14 @@ class facemodel_attributes(object):
   >>> numpy.allclose(classifier.score(['tests/000009.jpg'])[0,:5],[-2.39323288,  0.5700731 ,  0.917334  , -0.66668013, -2.66346439])
   True
   '''
-  def __init__(self,**options):
-    data=numpy.load('datasets/facemodel/attributes.npz')
+  def __init__(self, opt, **options):
+    data = numpy.load('datasets/%s/attributes.npz' % opt.dataset)
     self._fields=( '5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes', 'Bald', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 'Blurry', 'Brown_Hair', 'Bushy_Eyebrows', 'Chubby', 'Double_Chin', 'Eyeglasses', 'Goatee', 'Gray_Hair', 'Heavy_Makeup', 'High_Cheekbones', 'Male', 'Mouth_Slightly_Open', 'Mustache', 'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline', 'Rosy_Cheeks', 'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Hat', 'Wearing_Lipstick', 'Wearing_Necklace', 'Wearing_Necktie', 'Young', 'asian', 'baby', 'black', 'brown_eyes', 'child', 'color_photo', 'eyes_open', 'flash', 'flushed_face', 'frowning', 'fully_visible_forehead', 'harsh_lighting', 'indian', 'middle_aged', 'mouth_closed', 'mouth_wide_open', 'no_eyewear', 'obstructed_forehead', 'outdoor', 'partially_visible_forehead', 'posed_photo', 'round_face', 'round_jaw', 'senior', 'shiny_skin', 'soft_lighting', 'square_face', 'strong_nose_mouth_lines', 'sunglasses', 'teeth_not_visible', 'white' )
     self.filelist=tuple(data['filelist'])
     self._scores=data['scores']
     self._landmarks=data['landmarks']
     self._binary_score=(self._scores>=0)
+    self._attributes = data['attributes']
     # mark 70% as confident
     self._confident=numpy.zeros_like(self._scores,dtype=numpy.bool)
     self._confident[self._scores>numpy.percentile(self._scores[self._scores>=0],30,axis=0)]=True

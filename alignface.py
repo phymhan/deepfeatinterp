@@ -158,6 +158,7 @@ def fit_face(ipath,detector,predictor,template,border_value=(0.5,0.5,0.5),upsamp
 
   Returns warp matrix, template face, original mask, original image, loss.
   '''
+  print('='*1000)
   original255=skimage.io.imread(ipath).astype(numpy.ubyte)
   original=original255/255.0
   dets=detector(original255,upsample)
