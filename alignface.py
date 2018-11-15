@@ -281,12 +281,14 @@ def detect_landmarks(ipath,detector,predictor,upsample=0,image=None,resize=None)
     original=image
     original255=(original.clip(0,1)*255).round().astype(numpy.ubyte)
   dets=detector(original255,upsample)
-  if len(dets)!=1: raise FitError('{}: detected zero or more than one face.'.format(ipath))
+  if len(dets)!=1:
+    return None, None
+    # raise FitError('{}: detected zero or more than one face.'.format(ipath))
 
   for k,d in enumerate(dets):
     shape=predictor(original255,d)
     X=numpy.array([[shape.part(i).y,shape.part(i).x] for i in range(68)]).astype(numpy.float64)
-  return X,original
+  return X, original
 
 def compute_template(globspec='images/lfw_aegan/*/*.png',image_dims=[400,400],predictor_path='models/shape_predictor_68_face_landmarks.dat',center_crop=None,subsample=1):
   # Credit: http://dlib.net/face_landmark_detection.py.html

@@ -15,6 +15,8 @@ import alignface
 import imageutils
 import utils
 import random
+import skimage.io
+import skimage.transform
 
 
 def fit_submanifold_landmarks_to_image(template, original, Xlm, face_d, face_p, landmarks=list(range(68))):
@@ -102,6 +104,9 @@ if __name__ == '__main__':
     else:
         delta_params = list(numpy.load(config.vector_path.replace('.npz', '_inner.npz'))['inner_prod'])
 
+    data = numpy.load(config.vector_path)
+    image_dims = data['image_dims']
+
     X = [os.path.join(config.dataroot, x.rstrip('\n')) for x in open(config.input[0], 'r').readlines()] if config.input[0].endswith('.txt') else config.input
     X = random.sample(X, min(config.how_many, len(X)))
 
@@ -111,17 +116,23 @@ if __name__ == '__main__':
     # for each test image
     for i in range(len(X)):
         xX = X[i]
-        prefix_path = os.path.splitext(xX)[0]
+
+        # prefix_path = os.path.splitext(xX)[0]
         template, original = alignface.detect_landmarks(xX, face_d, face_p, resize=config.load_size)
+        if original is None:
+            continue
         image_dims = original.shape[:2]
         if min(image_dims) < minimum_resolution:
             s = float(minimum_resolution)/min(image_dims)
             image_dims = (int(round(image_dims[0]*s)),int(round(image_dims[1]*s)))
             original = imageutils.resize(original, image_dims)
         XF = model.mean_F([original])
-        XA = classifier.score([xX])[0]
+        # XA = classifier.score([xX])[0]
+        # print(xX, ', '.join(k for i, k in enumerate(fields) if XA[i] >= 0))
 
-        print(xX, ', '.join(k for i, k in enumerate(fields) if XA[i] >= 0))
+        # original255 = skimage.io.imread(xX).astype(numpy.ubyte)
+        # original = original255 / 255.0
+        # XF = model.mean_F(utils.image_feed(X, image_dims))
 
         attributes = classifier._attributes
         filelist = classifier.filelist
@@ -140,6 +151,9 @@ if __name__ == '__main__':
         xP = [P[i] for i in idxP[:K]]
         xQ = [Q[i] for i in idxQ[:K]]
 
+        # xP = random.sample(P, min(K, len(P)))
+        # xQ = random.sample(Q, min(K, len(Q)))
+
         PF = model.mean_F(utils.image_feed(xP[:K], image_dims))
         QF = model.mean_F(utils.image_feed(xQ[:K], image_dims))
 
@@ -148,23 +162,6 @@ if __name__ == '__main__':
 
         max_iter = config.iter
         init = original
-
-        # # interp all delta's
-        # for i, delta in enumerate(delta_params, 0):
-        #     true_delta = delta - numpy.inner(XF, WF)
-        #     print(xX, image_dims, delta, len(xP), len(xQ))
-        #     t2 = time.time()
-        #     Y = model.F_inverse(XF+WF*true_delta, max_iter=max_iter, initial_image=init)
-        #     t3 = time.time()
-        #     print('{} minutes to reconstruct'.format((t3-t2)/60.0))
-        #     result.append(Y)
-        #     max_iter = config.iter//2
-        #     init = Y
-        #
-        #     _, iname = os.path.split(xX)
-        #     opath = os.path.join(config.output, '%.3f_%s.jpg' % (config.attr_bins[i], iname))
-        #     imageutils.write(opath, Y)
-        #     print('--> image %s, class %d' % (xX, i))
 
         # only sample one delta
         _, iname = os.path.split(xX)
@@ -183,9 +180,6 @@ if __name__ == '__main__':
         Y = model.F_inverse(XF+WF*true_delta, max_iter=max_iter, initial_image=init)
         t3 = time.time()
         print('{} minutes to reconstruct'.format((t3-t2)/60.0))
-
-        max_iter = config.iter//2
-        init = Y
 
         imageutils.write(opath, Y)
         print('--> image %s, class %d' % (xX, i))
